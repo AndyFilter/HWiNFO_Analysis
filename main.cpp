@@ -10,9 +10,11 @@ HWND hwnd = nullptr;
 std::vector<const char*> labels;
 std::vector<const char*> labels_lowercase;
 std::vector<std::string> sources;
+std::vector<std::string> units;
 std::vector<std::vector<CSV_DATA_NUMERIC_FORMAT>> data;
+std::vector<CSV_DATA_NUMERIC_FORMAT> og_date;
 char filter_text[256] = {0};
-char* open_file_name = new char[] {'P', 'l', 'o', 't', 0};
+char* open_file_name = new char[MAX_PATH] {'P', 'l', 'o', 't', 0};
 bool use_relative_time = true;
 unsigned long long imported_time_start = 0;
 
@@ -81,22 +83,38 @@ void OpenHWI_File() {
     if (GetOpenFileName(&ofn))
     {
         memset(filter_text, 0, sizeof(filter_text));
-        labels.clear(); data.clear(); sources.clear(); cachedPlots.clear(); data_start_idx = 1;
+        labels.clear(); data.clear(); sources.clear(); cachedPlots.clear(); og_date.clear(); data_start_idx = 1;
+
         auto start = high_resolution_clock::now();
         if(!ParseFromFile(filename, labels, data, sources, true, &imported_time_start))
             return;
         auto stop = high_resolution_clock::now();
         printf("Parsing took %lldms\n", duration_cast<microseconds>(stop - start).count() / 1000);
-        auto full_file_name = std::string(filename);
+
+        og_date = data[0];
+
+        auto full_file_name = std::string_view (filename);
         auto file_name = full_file_name.substr(full_file_name.find_last_of("/\\") + 1);
         file_name = file_name.substr(0, file_name.find_last_of('.'));
-        strcpy_s(open_file_name, file_name.size() + 1, file_name.c_str());
+        file_name.copy(open_file_name, file_name.size() + 1);
+        open_file_name[file_name.size()] = 0;
+
         labels_lowercase.resize(labels.size());
+        units.resize(labels.size());
+
+        // parse all labels ignoring the case for faster search
+        // and extract the units from the labels
         for(int i = 0; i < labels.size(); i++) {
-            char* tmp = new char[strlen(labels[i])];
+            auto len = strlen(labels[i]);
+            char* tmp = new char[len + 1];
+            tmp[len] = 0;
             for(int j = 0; labels[i][j]; j++)
                 tmp[j] = tolower(labels[i][j]);
             labels_lowercase[i] = tmp;
+            auto open_bracket = strrchr(labels[i], '[');
+            if(open_bracket) {
+                units[i] = std::string(std::string_view(open_bracket, labels[i] - open_bracket + len - 1));
+            }
         }
         PreCacheGraphs();
 
@@ -109,68 +127,6 @@ void OpenHWI_File() {
 int DrawGui() {
     auto& io = ImGui::GetIO();
     auto avail = ImGui::GetContentRegionAvail();
-
-    /*
-    // ---------------------- TOP MENU BAR ----------------------
-      //static bool is_dragging_window = false;
-      //static ImVec2 drag_offset = {0,0};
-//    ImGui::SetNextWindowPos({0,0});
-//    //ImGui::SetNextWindowSize({io.DisplaySize.x, ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().WindowPadding.y * 2 + ImGui::GetStyle().FramePadding.y * 2 - ImGui::GetStyle().ItemSpacing.y});
-//    ImGui::SetNextWindowSize({io.DisplaySize.x, 30});
-//    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0,0});
-//    static bool is_dragging_window = false;
-//    static ImVec2 drag_offset = {0,0};
-//    if(ImGui::Begin("TopMenu", nullptr, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar)) {
-//        avail = ImGui::GetContentRegionAvail();
-//
-//        ImGui::SetCursorPos({ImGui::GetStyle().FramePadding.x ,ImGui::GetTextLineHeightWithSpacing() / 2});
-//        ImGui::Text("Hardware Info Analysis");
-//        ImGui::SameLine();
-//
-//        ImGui::PushStyleColor(ImGuiCol_Button, {0,0,0,0});
-//        ImGui::SetCursorPos({avail.x - 120, 0});
-//        if(ImGui::Button("_", {40, avail.y})) {
-//            //PostMessage(hwnd, WM_SYSCOMMAND, SC_MINIMIZE, 0);
-//            //ShowWindow( hwnd , SW_MINIMIZE );
-//        }
-//        ImGui::SameLine();
-//        ImGui::SetCursorPos({avail.x - 80, 0});
-//        if(ImGui::Button("[]", {40, avail.y})) {
-//
-//        }
-//        ImGui::SameLine();
-//        ImGui::SetCursorPos({avail.x - 40, 0});
-//        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, {0.7,0.3,0.3,1});
-//        ImGui::PushStyleColor(ImGuiCol_ButtonActive, {0.65,0.25,0.25,1});
-//        if(ImGui::Button("X", {40, avail.y})) {
-//            return 1;
-//        }
-//        ImGui::PopStyleColor(3);
-//
-//        //if(ImGui::IsMouseClicked(0) && ImGui::IsMouseHoveringRect({0, 0}, {io.DisplaySize.x, 20}, false)) {
-//        if(ImGui::IsMouseClicked(0) && ImGui::IsWindowHovered()) {
-//            drag_offset = ImGui::GetMousePos();
-//            is_dragging_window = true;
-//            printf("Started dragging\n");
-//        }
-//    }
-//    ImGui::End();
-//    ImGui::PopStyleVar();
-//
-//    ImGui::Text("Pos [%.2f, %.2f]", ImGui::GetMousePos().x, ImGui::GetMousePos().y);
-//
-//    if(is_dragging_window && ImGui::IsMouseReleased(0))
-//        is_dragging_window = false;
-//
-//    if(is_dragging_window) {
-//        ImGui::Text("Drag offset: [%.2f, %.2f]", drag_offset.x, drag_offset.y);
-//        POINT currentpos;
-//        GetCursorPos(&currentpos);
-//        int x = currentpos.x - drag_offset.x;
-//        int y = currentpos.y - drag_offset.y;
-//        SetWindowPos(hwnd, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOREDRAW);
-//    }
-     */
 
     ImGui::SetNextWindowPos({0,0});
     ImGui::SetNextWindowSize(io.DisplaySize);
@@ -187,11 +143,11 @@ int DrawGui() {
         ImGui::SameLine();
         ImGui::Checkbox("Shaded graphs", &shaded_graphs);
         if(ImGui::Checkbox("Use relative time", &use_relative_time)) {
-            for(auto& val : data[0]) {
+            for(int i = 0; i < data[0].size(); i++) {
                 if(use_relative_time)
-                    val -= (CSV_DATA_NUMERIC_FORMAT)imported_time_start;
+                    data[0][i] = og_date[i];
                 else
-                    val += (CSV_DATA_NUMERIC_FORMAT)imported_time_start;
+                    data[0][i] += (CSV_DATA_NUMERIC_FORMAT)imported_time_start;
             }
         }
         ImGui::SetItemTooltip("Sets the first entry time to 0 and all later timestamps are relative to the first one");
@@ -265,7 +221,7 @@ int DrawGui() {
                 if (ImPlot::BeginDragDropTargetAxis(y)) {
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PLOT_DND")) {
                         int i = *(int*)payload->Data; cachedPlots[i].plot_idx = 0; cachedPlots[i].Yax = y;
-                        YA_label[y - ImAxis_Y1] = labels[i];
+                        YA_label[y - ImAxis_Y1] = units[i].c_str();
                     }
                     ImPlot::EndDragDropTarget();
                 }
