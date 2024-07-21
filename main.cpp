@@ -134,14 +134,15 @@ int DrawGui() {
     if(ImGui::Begin("MainWindow", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
         ImGui::PopStyleVar();
         static bool shaded_graphs = true;
+        static bool scatter_plot = false;
 
-        ImGui::BeginChild("Left Menu",ImVec2(200,-1), ImGuiChildFlags_ResizeX);
+        ImGui::SetNextWindowSizeConstraints({220, 0}, {FLT_MAX, FLT_MAX});
+        ImGui::BeginChild("Left Menu",ImVec2(220,-1), ImGuiChildFlags_ResizeX);
 
         if(ImGui::Button("Open File")) {
             OpenHWI_File();
         }
         ImGui::SameLine();
-        ImGui::Checkbox("Shaded graphs", &shaded_graphs);
         if(ImGui::Checkbox("Use relative time", &use_relative_time)) {
             for(int i = 0; i < data[0].size(); i++) {
                 if(use_relative_time)
@@ -151,6 +152,9 @@ int DrawGui() {
             }
         }
         ImGui::SetItemTooltip("Sets the first entry time to 0 and all later timestamps are relative to the first one");
+        ImGui::Checkbox("Shaded graphs", &shaded_graphs);
+        ImGui::SameLine();
+        ImGui::Checkbox("Scatter plot", &scatter_plot);
 
         ImGui::SetNextItemWidth(-1);
         if(ImGui::InputTextWithHint("##Plot_Search_Box", "Search", filter_text, 256)) {
@@ -197,7 +201,6 @@ int DrawGui() {
                 ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
             ImPlot::SetupAxis(ImAxis_Y1, YA_label[0]);
             ImPlot::SetupAxis(ImAxis_Y2, YA_label[1], ImPlotAxisFlags_Opposite);
-            //ImPlot::SetupAxis(ImAxis_Y3, "[drop here]");
             for(int i = 1; i < cachedPlots.size(); i++) {
                 if(cachedPlots[i].plot_idx != 0) continue;
 
@@ -206,7 +209,10 @@ int DrawGui() {
                 ImPlot::SetNextFillStyle(cachedPlots[i].color, 0.25);
                 if(shaded_graphs)
                     ImPlot::PlotShaded(labels[i], data[0].data(), data[i].data(), data[i].size());
-                ImPlot::PlotLine(labels[i], data[0].data(), data[i].data(), data[i].size());
+                if(scatter_plot)
+                    ImPlot::PlotScatter(labels[i], data[0].data(), data[i].data(), data[i].size());
+                else
+                    ImPlot::PlotLine(labels[i], data[0].data(), data[i].data(), data[i].size());
 
                 // allow legend item labels to be DND sources
                 if (ImPlot::BeginDragDropSourceItem(labels[i])) {

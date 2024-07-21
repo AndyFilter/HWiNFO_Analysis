@@ -41,7 +41,7 @@ bool ParseFromFile(const char *filename, std::vector<const char*> &labels, std::
         // we love using deprecated functions here
         for(; (token != nullptr); token = std::strtok(nullptr, ","), col_idx++) {
             std::string entry(token);
-            if ((is_time_separate && col_idx == 2) || col_idx == 0)
+            if (line_idx == 0)
                 ANSII_2_UTF8(entry);
 
             // Parse Date / Time
