@@ -3,8 +3,8 @@
 #include <sstream>
 #include <iomanip>
 
-// I think there are multiple formats /;
-// I'm using this one "2023-03-18 18:47:50.606Z"
+#define CSV_SEPARATOR ","
+
 const char* DATE_FORMAT_COMBINED = "%Y-%m-%d%t%H:%M:%S";
 const char* DATE_FORMAT_DATE = "%d.%m.%Y";
 const char* DATE_FORMAT_TIME = "%H:%M:%S";
@@ -35,16 +35,16 @@ bool ParseFromFile(const char *filename, std::vector<const char*> &labels, std::
     while (std::getline(file, line)) {
         char *line_cstr = new char[line.size() + 1];
         std::strcpy(line_cstr, line.c_str());
-        char *token = std::strtok(line_cstr, ",");
+        char *token = std::strtok(line_cstr, CSV_SEPARATOR);
         size_t col_idx = 0; // column
 
         // we love using deprecated functions here
-        for(; (token != nullptr); token = std::strtok(nullptr, ","), col_idx++) {
+        for(; (token != nullptr); token = std::strtok(nullptr, CSV_SEPARATOR), col_idx++) {
             std::string entry(token);
             if (line_idx == 0)
                 ANSII_2_UTF8(entry);
 
-            // Parse Date / Time
+
             if (line_idx > 1 && ((col_idx == 0 && (entry == "Date/Time" || entry == "Date")) || (is_time_separate && col_idx == 1 && entry == "Time"))) {
                 parsing_sources = true;
                 break;
@@ -67,6 +67,7 @@ bool ParseFromFile(const char *filename, std::vector<const char*> &labels, std::
 
             CSV_DATA_NUMERIC_FORMAT value;
             try {
+                // Parse Date - Time
                 if (is_time_separate && col_idx < 2) {
                     static std::tm _date_time_part{};
                     if (col_idx == 0) {
@@ -82,8 +83,13 @@ bool ParseFromFile(const char *filename, std::vector<const char*> &labels, std::
                             data[0].push_back(parsed_time - start_time);
                         }
                     }
-                } else if (col_idx == 0) {
+                } else if (col_idx == 0) { // Parse Date/Time
                     std::tm _time{};
+                    // Deal with ISO-8610 encoded date/time
+                    // (its uses "T" instead of a white space to separate time from date)
+                    if(auto it = entry.find('T'); it != std::string::npos)
+                        entry[it] = ' ';
+
                     if (std::istringstream(entry) >> std::get_time(&_time, DATE_FORMAT_COMBINED)) {
                         long long parsed_time = std::mktime(&_time);
                         if (relative_time && !start_time) {
