@@ -9,7 +9,7 @@ HWND hwnd = nullptr;
 
 std::vector<const char*> labels;
 std::vector<const char*> labels_lowercase;
-std::vector<std::string> sources;
+std::vector<const char*> sources;
 std::vector<std::string> units;
 std::vector<std::vector<CSV_DATA_NUMERIC_FORMAT>> data;
 std::vector<CSV_DATA_NUMERIC_FORMAT> og_date;
@@ -171,6 +171,8 @@ int DrawGui() {
             if(!cachedPlots[k].show) continue;
             ImPlot::ItemIcon((ImVec4)cachedPlots[k].color, 20); ImGui::SameLine();
             ImGui::Selectable(labels[k], false, 0);
+            if(k < sources.size())
+                ImGui::SetItemTooltip("%s", sources[k]);
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                 ImGui::SetDragDropPayload("PLOT_DND", &k, sizeof(int));
                 ImPlot::ItemIcon((ImVec4)cachedPlots[k].color); ImGui::SameLine();
@@ -261,6 +263,8 @@ int DrawGui() {
 
 int main() {
     hwnd = GUI::Setup(DrawGui);
+
+    ImGui::GetIO().IniFilename = nullptr;
 
     while(true) {
         if(GUI::DrawFrame())

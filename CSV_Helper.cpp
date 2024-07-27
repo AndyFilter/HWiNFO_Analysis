@@ -19,7 +19,7 @@ void ANSII_2_UTF8(std::string& str) {
     }
 }
 
-bool ParseFromFile(const char *filename, std::vector<const char*> &labels, std::vector<std::vector<CSV_DATA_NUMERIC_FORMAT>> &data, std::vector<std::string>& sources, bool relative_time, unsigned long long* time_start) {
+bool ParseFromFile(const char *filename, std::vector<const char*> &labels, std::vector<std::vector<CSV_DATA_NUMERIC_FORMAT>> &data, std::vector<const char*>& sources, bool relative_time, unsigned long long* time_start) {
     std::ifstream file(filename);
     if (!file.is_open()) return false;
 
@@ -61,7 +61,12 @@ bool ParseFromFile(const char *filename, std::vector<const char*> &labels, std::
                 data.resize(labels.size());
 
             if (parsing_sources) { // Last row (data sources)
-                sources.push_back(entry);
+                if(entry.size() < 2){
+                    auto x = 0;
+                }
+                char* _temp = new char[entry.size() + 1];
+                strcpy_s(_temp, entry.size() + 1, entry.c_str());
+                sources.push_back(_temp);
                 continue;
             }
 
