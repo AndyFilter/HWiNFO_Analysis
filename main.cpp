@@ -17,10 +17,14 @@ char filter_text[256] = {0};
 char* open_file_name = new char[MAX_PATH] {'P', 'l', 'o', 't', 0};
 bool use_relative_time = true;
 unsigned long long imported_time_start = 0;
+float avgTimeStep = 0.0f;
 
 int data_start_idx = 1; // Used to skip first (Date/Time) or first two (Date, Time) columns
 
+#define PLOT_SAMPLES_MARGIN 20
 #define HASH_RANDOMNESS 13
+
+//#define AGGRESSIVE_GRAPH_CULLING // It is even slower!
 
 //std::vector<int> selected_variables{0};
 
@@ -61,6 +65,9 @@ void PreCacheGraphs() {
     for (int i = 0; i < cachedPlots.size(); i++) {
         cachedPlots[i] = CachedPlot(i, ImColor::HSV((float)HashString<unsigned short>(labels[i]) / (1 << (sizeof(short) * 8)), 0.5f, 1.f, 1.f));
     }
+
+    avgTimeStep = (data[0].back() - data[0].front()) / data[0].size();
+    printf("avg step = %.2f\n", avgTimeStep);
 }
 
 #include <chrono>
@@ -86,7 +93,7 @@ void OpenHWI_File() {
         labels.clear(); data.clear(); sources.clear(); cachedPlots.clear(); og_date.clear(); data_start_idx = 1;
 
         auto start = high_resolution_clock::now();
-        if(!ParseFromFile(filename, labels, data, sources, true, &imported_time_start))
+        if(!ParseFromFile(filename, labels, data, sources, use_relative_time, &imported_time_start))
             return;
         auto stop = high_resolution_clock::now();
         printf("Parsing took %lldms\n", duration_cast<microseconds>(stop - start).count() / 1000);
@@ -135,6 +142,7 @@ int DrawGui() {
         ImGui::PopStyleVar();
         static bool shaded_graphs = true;
         static bool scatter_plot = false;
+        static float stride_multi = 4;
 
         ImGui::SetNextWindowSizeConstraints({220, 0}, {FLT_MAX, FLT_MAX});
         ImGui::BeginChild("Left Menu",ImVec2(220,-1), ImGuiChildFlags_ResizeX);
@@ -143,7 +151,7 @@ int DrawGui() {
             OpenHWI_File();
         }
         ImGui::SameLine();
-        if(ImGui::Checkbox("Use relative time", &use_relative_time)) {
+        if(ImGui::Checkbox("Use relative time", &use_relative_time) && !data.empty()) {
             for(int i = 0; i < data[0].size(); i++) {
                 if(use_relative_time)
                     data[0][i] = og_date[i];
@@ -155,6 +163,9 @@ int DrawGui() {
         ImGui::Checkbox("Shaded graphs", &shaded_graphs);
         ImGui::SameLine();
         ImGui::Checkbox("Scatter plot", &scatter_plot);
+
+        ImGui::DragFloat("Plot Res.", &stride_multi, 0.1f, 0.1, 10, "%.2f");
+        ImGui::SetItemTooltip("Might cause slight visual glitches when used with low values");
 
         ImGui::SetNextItemWidth(-1);
         if(ImGui::InputTextWithHint("##Plot_Search_Box", "Search", filter_text, 256)) {
@@ -196,6 +207,8 @@ int DrawGui() {
 
 
         static std::vector<const char*> YA_label = {"[drop here]", "[drop here]"};
+        static ImVec2 last_plot_size {avail};
+        static ImPlotRect last_plot_limits (0, 500, 0, 1);
 
         if(ImPlot::BeginPlot(open_file_name, {-1, -1})) {
             ImPlot::SetupAxis(ImAxis_X1, "time");
@@ -203,27 +216,100 @@ int DrawGui() {
                 ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
             ImPlot::SetupAxis(ImAxis_Y1, YA_label[0]);
             ImPlot::SetupAxis(ImAxis_Y2, YA_label[1], ImPlotAxisFlags_Opposite);
-            for(int i = 1; i < cachedPlots.size(); i++) {
-                if(cachedPlots[i].plot_idx != 0) continue;
+//            ImGui::Text("Limits: [%.2f, %.2f]", last_plot_limits.X.Min, last_plot_limits.X.Max);
+//            ImGui::Text("Size: [%.2f, %.2f]", last_plot_size.x, last_plot_size.y);
 
-                ImPlot::SetAxis(cachedPlots[i].Yax);
-                ImPlot::SetNextLineStyle(cachedPlots[i].color);
-                ImPlot::SetNextFillStyle(cachedPlots[i].color, 0.25);
-                if(shaded_graphs)
-                    ImPlot::PlotShaded(labels[i], data[0].data(), data[i].data(), data[i].size());
-                if(scatter_plot)
-                    ImPlot::PlotScatter(labels[i], data[0].data(), data[i].data(), data[i].size());
-                else
-                    ImPlot::PlotLine(labels[i], data[0].data(), data[i].data(), data[i].size());
+            if(!data.empty()) {
 
-                // allow legend item labels to be DND sources
-                if (ImPlot::BeginDragDropSourceItem(labels[i])) {
-                    ImGui::SetDragDropPayload("PLOT_DND", &i, sizeof(int));
-                    ImPlot::ItemIcon((ImVec4)cachedPlots[i].color); ImGui::SameLine();
-                    ImGui::TextUnformatted(labels[i]);
-                    ImPlot::EndDragDropSource();
+                float plot_x_range = last_plot_limits.X.Max - last_plot_limits.X.Min;
+                static int stride = 0;
+                stride = max(1, ((int) plot_x_range / last_plot_size.x) / stride_multi + 1);
+
+                //data[0].back() / data[0].size();
+
+#ifdef AGGRESSIVE_GRAPH_CULLING
+                float visible_samples = plot_x_range / avgTimeStep;
+                float scale_factor = data[0].size() / plot_x_range * avgTimeStep;
+                float min_plot_size = min(
+                        min(last_plot_size.x * stride_multi + 2, visible_samples + PLOT_SAMPLES_MARGIN),
+                        data[0].size());
+                static float samplesJump = 0; // Stride
+                samplesJump = data[0].size() / min_plot_size;
+                static int offset = 0;
+                offset = max(1, (last_plot_limits.X.Min - data[0].front()) / avgTimeStep);
+                samplesJump = max(1, samplesJump / scale_factor);
+                samplesJump = max(1, plot_x_range / min_plot_size / avgTimeStep);
+                float items_overflow_r = max(0, last_plot_limits.X.Max - data[0].back()) / plot_x_range;
+                float items_overflow_l = min(0, last_plot_limits.X.Min - data[0].front()) / -plot_x_range;
+                int items_outside_of_bounds = (items_overflow_r + items_overflow_l) * min_plot_size;
+                //offset = (max(0, last_plot_limits.X.Min - data[0].front()) / plot_x_range) * min_plot_size * samplesJump;
+
+//                ImGui::Text(
+//                        "scale factor = %.3f, min_plot_size.x = %f, display scale = %.2f, offset = %f, right 0verflow: %.2f, left 0verflow: %.2f, OOB: %i, OOB frac %.2f, visible samples: %.2f\n",
+//                        scale_factor, min_plot_size, samplesJump, offset * avgTimeStep, items_overflow_r,
+//                        items_overflow_l, items_outside_of_bounds, items_overflow_r + items_overflow_l,
+//                        visible_samples);
+#endif
+
+                static int i = 1;
+                for (i = 1; i < cachedPlots.size(); i++) {
+                    if (cachedPlots[i].plot_idx != 0) continue;
+
+                    int plot_x_items = data[i].size() / stride;
+
+                    ImPlot::SetAxis(cachedPlots[i].Yax);
+                    ImPlot::SetNextLineStyle(cachedPlots[i].color);
+                    ImPlot::SetNextFillStyle(cachedPlots[i].color, 0.25);
+                    if (shaded_graphs)
+#ifndef AGGRESSIVE_GRAPH_CULLING
+                        ImPlot::PlotShaded(labels[i], data[0].data(), data[i].data(), plot_x_items, 0, 0, 0, sizeof(CSV_DATA_NUMERIC_FORMAT) * stride);
+#else
+                        ImPlot::PlotShadedG(labels[i], [](int k, void *data) {
+                            auto *d = (std::vector<CSV_DATA_NUMERIC_FORMAT> *) data;
+                            int idx = k * samplesJump;//min(d->size() - 1, k * samplesJump + offset);
+                            return ImPlotPoint(d[0][idx], d[i][(idx)]);
+                        }, data.data(), [](int k, void *data) {
+                            auto *d = (std::vector<CSV_DATA_NUMERIC_FORMAT> *) data;
+                            int idx = k * samplesJump;//min(d->size() - 1, k * samplesJump + offset);
+                            return ImPlotPoint(d[0][idx], 0);
+                        }, data.data(), data[i].size() / samplesJump);
+#endif
+
+                    if (scatter_plot)
+#ifndef AGGRESSIVE_GRAPH_CULLING
+                        ImPlot::PlotScatter(labels[i], data[0].data(), data[i].data(), plot_x_items, 0, 0, sizeof(CSV_DATA_NUMERIC_FORMAT) * stride);
+#else
+                        ImPlot::PlotScatterG(labels[i], [](int k, void *data) {
+                            auto *d = (std::vector<CSV_DATA_NUMERIC_FORMAT> *) data;
+                            int idx = min(d->size() - 1, k * samplesJump + offset);
+                            return ImPlotPoint(d[0][idx], d[i][(idx)]);
+                        }, data[i].data(), min_plot_size - items_outside_of_bounds);
+#endif
+                    else
+#ifndef AGGRESSIVE_GRAPH_CULLING
+                        ImPlot::PlotLine(labels[i], data[0].data(), data[i].data(), plot_x_items, 0, 0, sizeof(CSV_DATA_NUMERIC_FORMAT) * stride);
+#else
+                        ImPlot::PlotLineG(labels[i], [](int k, void *data) {
+                            auto *d = (std::vector<CSV_DATA_NUMERIC_FORMAT> *) data;
+                            int idx = min(d->size() - 1, k * samplesJump + offset);
+                            return ImPlotPoint(d[0][idx], d[i][(idx)]);
+                        }, data.data(), min_plot_size - items_outside_of_bounds);
+#endif
+
+                    // allow legend item labels to be DND sources
+                    if (ImPlot::BeginDragDropSourceItem(labels[i])) {
+                        ImGui::SetDragDropPayload("PLOT_DND", &i, sizeof(int));
+                        ImPlot::ItemIcon((ImVec4) cachedPlots[i].color);
+                        ImGui::SameLine();
+                        ImGui::TextUnformatted(labels[i]);
+                        ImPlot::EndDragDropSource();
+                    }
                 }
+
             }
+
+            last_plot_size = ImPlot::GetPlotSize();
+            last_plot_limits = ImPlot::GetPlotLimits();
 
             for (int y = ImAxis_Y1; y <= ImAxis_Y2; ++y) {
                 if (ImPlot::BeginDragDropTargetAxis(y)) {

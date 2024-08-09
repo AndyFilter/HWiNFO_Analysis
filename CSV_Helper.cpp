@@ -61,9 +61,6 @@ bool ParseFromFile(const char *filename, std::vector<const char*> &labels, std::
                 data.resize(labels.size());
 
             if (parsing_sources) { // Last row (data sources)
-                if(entry.size() < 2){
-                    auto x = 0;
-                }
                 char* _temp = new char[entry.size() + 1];
                 strcpy_s(_temp, entry.size() + 1, entry.c_str());
                 sources.push_back(_temp);

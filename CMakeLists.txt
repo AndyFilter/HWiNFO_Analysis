@@ -18,3 +18,6 @@ add_executable(${PROJECT_NAME} main.cpp
         External/ImGui/implot.cpp
         CSV_Helper.cpp
         CSV_Helper.h)
+
+add_compile_options(-O3)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Ox")

@@ -1,11 +1,3 @@
-// Dear ImGui: standalone example application for DirectX 12
-
-// Learn about Dear ImGui:
-// - FAQ                  https://dearimgui.com/faq
-// - Getting Started      https://dearimgui.com/getting-started
-// - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
-// - Introduction, links and more at the top of imgui.cpp
-
 // Important: to compile on 32-bit systems, the DirectX12 backend requires code to be compiled with '#define ImTextureID ImU64'.
 // This is because we need ImTextureID to carry a 64-bit value and by default ImTextureID is defined as void*.
 // This define is set in the example .vcxproj file and need to be replicated in your app or by adding it to your imconfig.h file.
@@ -67,6 +59,9 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 HWND _hwnd;
 WNDCLASSEXW wc;
 int (*OnGui)();
+bool gotEvent = true; // Denotes whether an event (look WndProc) was received between the last (rendered) frame and now
+
+#define ALLOWED_FRAMES_WITHOUT_EVENT 3
 
 void SetupImGuiStyle()
 {
@@ -252,6 +247,7 @@ ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 int GUI::DrawFrame() {
     // Poll and handle messages (inputs, window resize, etc.)
     // See the WndProc() function below for our to dispatch events to the Win32 backend.
+    static int framesWithoutEvent = 0; // Used to render a couple more frames when there were no events
     MSG msg {nullptr};
     while (::PeekMessage(&msg, nullptr, 0U, 0U, PM_REMOVE))
     {
@@ -261,13 +257,22 @@ int GUI::DrawFrame() {
             return 1;
     }
 
+    if(gotEvent)
+        framesWithoutEvent = 0;
+
     // Handle window screen locked
-    if (g_SwapChainOccluded && g_pSwapChain->Present(0, DXGI_PRESENT_TEST) == DXGI_STATUS_OCCLUDED)
+    if (framesWithoutEvent >= ALLOWED_FRAMES_WITHOUT_EVENT ||
+    g_SwapChainOccluded && g_pSwapChain->Present(0, DXGI_PRESENT_TEST) == DXGI_STATUS_OCCLUDED)
     {
         ::Sleep(10);
         return 0;
     }
+    if(!gotEvent)
+        framesWithoutEvent++;
+    gotEvent = false;
     g_SwapChainOccluded = false;
+
+
 
     // Start the Dear ImGui frame
     ImGui_ImplDX12_NewFrame();
@@ -538,6 +543,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
 LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
+    gotEvent = true;
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
         return true;
 
