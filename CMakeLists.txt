@@ -3,7 +3,13 @@ project(HWiNFO_Analysis)
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_executable(${PROJECT_NAME} main.cpp
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(WINDOWS_WINDOW WIN32)
+else()
+    set(WINDOWS_WINDOW "")
+endif ()
+
+add_executable(${PROJECT_NAME} ${WINDOWS_WINDOW} main.cpp
         GUI/gui.cpp
         GUI/gui.h
         External/ImGui/imgui_widgets.cpp

@@ -21,7 +21,7 @@ float avgTimeStep = 0.0f;
 
 int data_start_idx = 1; // Used to skip first (Date/Time) or first two (Date, Time) columns
 
-#define PLOT_SAMPLES_MARGIN 20
+#define PLOT_SAMPLES_MARGIN 20 // Used only with AGGRESSIVE_GRAPH_CULLING defined
 #define HASH_RANDOMNESS 13
 
 //#define AGGRESSIVE_GRAPH_CULLING // It is even slower!
@@ -70,9 +70,13 @@ void PreCacheGraphs() {
     printf("avg step = %.2f\n", avgTimeStep);
 }
 
+#ifdef _DEBUG
 #include <chrono>
+#endif
 void OpenHWI_File() {
+#ifdef _DEBUG
     using namespace std::chrono;
+#endif
     char filename[MAX_PATH]{ "" };
 
     const char szExt[] = "CSV\0*.csv\0\0";
@@ -92,11 +96,15 @@ void OpenHWI_File() {
         memset(filter_text, 0, sizeof(filter_text));
         labels.clear(); data.clear(); sources.clear(); cachedPlots.clear(); og_date.clear(); data_start_idx = 1;
 
+#ifdef _DEBUG
         auto start = high_resolution_clock::now();
+#endif
         if(!ParseFromFile(filename, labels, data, sources, use_relative_time, &imported_time_start))
             return;
+#ifdef _DEBUG
         auto stop = high_resolution_clock::now();
         printf("Parsing took %lldms\n", duration_cast<microseconds>(stop - start).count() / 1000);
+#endif
 
         og_date = data[0];
 
@@ -143,6 +151,7 @@ int DrawGui() {
         static bool shaded_graphs = true;
         static bool scatter_plot = false;
         static float stride_multi = 4;
+        static std::vector<const char*> YA_label = {"[drop here]", "[drop here]"};
 
         ImGui::SetNextWindowSizeConstraints({220, 0}, {FLT_MAX, FLT_MAX});
         ImGui::BeginChild("Left Menu",ImVec2(220,-1), ImGuiChildFlags_ResizeX);
@@ -178,10 +187,12 @@ int DrawGui() {
 
         ImGui::BeginChild("Items Left Menu",ImVec2(-1,-1), ImGuiChildFlags_Border);
 
+        // Push the color for the active plot elements
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
         for (int k = data_start_idx; k < cachedPlots.size(); ++k) {
             if(!cachedPlots[k].show) continue;
             ImPlot::ItemIcon((ImVec4)cachedPlots[k].color, 20); ImGui::SameLine();
-            ImGui::Selectable(labels[k], false, 0);
+            ImGui::Selectable(labels[k], cachedPlots[k].plot_idx != -1);
             if(k < sources.size())
                 ImGui::SetItemTooltip("%s", sources[k]);
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
@@ -190,7 +201,26 @@ int DrawGui() {
                 ImGui::TextUnformatted(labels[k]);
                 ImGui::EndDragDropSource();
             }
+            if(ImGui::IsItemHovered()) {
+                // Double Left-Click to add the item to the first Y axis
+                if(ImGui::IsMouseDoubleClicked(0)) {
+                    cachedPlots[k].plot_idx = 0;
+                    cachedPlots[k].Yax = ImAxis_Y1;
+                    YA_label[0] = units[k].c_str();
+                }
+                // Double Right-Click to add the item to the second Y axis
+                else if (ImGui::IsMouseDoubleClicked(1)) {
+                    cachedPlots[k].plot_idx = 0;
+                    cachedPlots[k].Yax = ImAxis_Y2;
+                    YA_label[1] = units[k].c_str();
+                }
+                // Single Right-Click to remove the item
+                else if(cachedPlots[k].plot_idx >= 0 && ImGui::IsItemClicked(1)) {
+                    cachedPlots[k].plot_idx = -1;
+                }
+            }
         }
+        ImGui::PopStyleColor();
         ImGui::EndChild();
         ImGui::EndChild();
 
@@ -205,8 +235,6 @@ int DrawGui() {
 
         ImGui::BeginGroup();
 
-
-        static std::vector<const char*> YA_label = {"[drop here]", "[drop here]"};
         static ImVec2 last_plot_size {avail};
         static ImPlotRect last_plot_limits (0, 500, 0, 1);
 
@@ -311,6 +339,7 @@ int DrawGui() {
             last_plot_size = ImPlot::GetPlotSize();
             last_plot_limits = ImPlot::GetPlotLimits();
 
+            // Y1, Y2 axis Drag-N-Drop
             for (int y = ImAxis_Y1; y <= ImAxis_Y2; ++y) {
                 if (ImPlot::BeginDragDropTargetAxis(y)) {
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PLOT_DND")) {
@@ -321,6 +350,7 @@ int DrawGui() {
                 }
             }
 
+            // Plot Drag-N-Drop
             if (ImPlot::BeginDragDropTargetPlot()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PLOT_DND")) {
                     int i = *(int*)payload->Data; cachedPlots[i].plot_idx = 0;
@@ -328,6 +358,7 @@ int DrawGui() {
                 ImPlot::EndDragDropTarget();
             }
 
+            // Legend Drag-N-Drop
             if (ImPlot::BeginDragDropTargetLegend()) {
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("PLOT_DND")) {
                     int i = *(int*)payload->Data; cachedPlots[i].plot_idx = 0;
@@ -347,7 +378,14 @@ int DrawGui() {
     return 0;
 }
 
+#ifndef _DEBUG
+int APIENTRY WinMain(_In_ HINSTANCE hInstance,
+                     _In_opt_ HINSTANCE hPrevInstance,
+                     _In_ LPSTR lpCmdLine,
+                     _In_ int nShowCmd) {
+#else
 int main() {
+#endif
     hwnd = GUI::Setup(DrawGui);
 
     ImGui::GetIO().IniFilename = nullptr;
