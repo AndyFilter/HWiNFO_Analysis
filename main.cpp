@@ -63,7 +63,7 @@ void PreCacheGraphs() {
     cachedPlots.resize(labels.size());
 
     for (int i = 0; i < cachedPlots.size(); i++) {
-        cachedPlots[i] = CachedPlot(i, ImColor::HSV((float)HashString<unsigned short>(labels[i]) / (1 << (sizeof(short) * 8)), 0.5f, 1.f, 1.f));
+        cachedPlots[i] = CachedPlot(i, ImColor::HSV((float)HashString<unsigned short>(labels[i]) / (1 << (sizeof(short) * 8)), 0.65f, 1.f, 1.f));
     }
 
     avgTimeStep = (data[0].back() - data[0].front()) / data[0].size();
@@ -154,7 +154,7 @@ int DrawGui() {
         static std::vector<const char*> YA_label = {"[drop here]", "[drop here]"};
 
         ImGui::SetNextWindowSizeConstraints({220, 0}, {FLT_MAX, FLT_MAX});
-        ImGui::BeginChild("Left Menu",ImVec2(220,-1), ImGuiChildFlags_ResizeX);
+        ImGui::BeginChild("Left Menu", ImVec2(220,-1), ImGuiChildFlags_ResizeX);
 
         if(ImGui::Button("Open File")) {
             OpenHWI_File();
@@ -191,7 +191,15 @@ int DrawGui() {
         ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
         for (int k = data_start_idx; k < cachedPlots.size(); ++k) {
             if(!cachedPlots[k].show) continue;
-            ImPlot::ItemIcon((ImVec4)cachedPlots[k].color, 20); ImGui::SameLine();
+            ImGui::PushID(k);
+            ImPlot::ItemIcon((ImVec4)cachedPlots[k].color, 20);
+            if(ImGui::BeginPopupContextItem()) {
+                ImGui::ColorPicker4("Select Color", (float*)&cachedPlots[k].color);
+                //ImGui::ColorEdit4("Select Color", (float*)&cachedPlots[k].color);
+                ImGui::EndPopup();
+            }
+            ImGui::PopID();
+            ImGui::SameLine();
             ImGui::Selectable(labels[k], cachedPlots[k].plot_idx != -1);
             if(k < sources.size())
                 ImGui::SetItemTooltip("%s", sources[k]);

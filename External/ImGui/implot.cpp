@@ -4829,7 +4829,7 @@ void ItemIcon(ImU32 col, float rounding) {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     ImVec2 pos = window->DC.CursorPos;
     ImGui::GetWindowDrawList()->AddRectFilled(pos + ImVec2(0,2), pos + size - ImVec2(0,2), col, rounding);
-    ImGui::Dummy(size);
+    ImGui::InvisibleButton("ItemIconDummy", size);
 }
 
 void ColormapIcon(ImPlotColormap cmap) {
