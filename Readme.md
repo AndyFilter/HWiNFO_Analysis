@@ -1,8 +1,7 @@
 # HWiNFO Analysis
 HWiNFO Analysis is a Windows program for visualizing data reports made with [HWiNFO](https://www.hwinfo.com)
 
-![image](https://github.com/user-attachments/assets/a7eab09f-12e1-4cf9-a302-5ce257edf379)
-
+![GitHub_Showcase_VLR_Def](https://github.com/user-attachments/assets/1308d6bd-3cb7-4341-9e3b-c3d3f5299f35)
 
 ## How to use?
 1. All you need to do is Start Logging info in HWiNFO, any date format / units work. All you need to set is the delimiter to '*,*' like that:<br>
