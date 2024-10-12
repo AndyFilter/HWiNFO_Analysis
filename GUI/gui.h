@@ -6,4 +6,5 @@ namespace GUI {
     HWND Setup(int (*OnGuiFunc)());
     void Destroy();
     int DrawFrame();
+    inline void (*OnFileDrop)(WPARAM);
 }

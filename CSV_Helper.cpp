@@ -67,6 +67,10 @@ bool ParseFromFile(const char *filename, std::vector<const char*> &labels, std::
                 continue;
             }
 
+            if(col_idx >= data.size()) {
+                return false;
+            }
+
             CSV_DATA_NUMERIC_FORMAT value;
             try {
                 // Parse Date - Time

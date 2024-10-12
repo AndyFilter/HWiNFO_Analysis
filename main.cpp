@@ -73,10 +73,57 @@ void PreCacheGraphs() {
 #ifdef _DEBUG
 #include <chrono>
 #endif
-void OpenHWI_File() {
+bool TryParseFile(const char* filename) {
 #ifdef _DEBUG
     using namespace std::chrono;
+    auto start = high_resolution_clock::now();
 #endif
+
+    if(!ParseFromFile(filename, labels, data, sources, use_relative_time, &imported_time_start))
+        return false;
+
+    if( labels.size() < 2 || data.size() < 2 || labels.size() != data.size() || data[0].empty()) {
+        return false;
+    }
+
+#ifdef _DEBUG
+    auto stop = high_resolution_clock::now();
+    printf("Parsing took %lldms\n", duration_cast<microseconds>(stop - start).count() / 1000);
+#endif
+
+    og_date = data[0];
+
+    auto full_file_name = std::string_view (filename);
+    auto file_name = full_file_name.substr(full_file_name.find_last_of("/\\") + 1);
+    file_name = file_name.substr(0, file_name.find_last_of('.'));
+    file_name.copy(open_file_name, file_name.size() + 1);
+    open_file_name[file_name.size()] = 0;
+
+    labels_lowercase.resize(labels.size());
+    units.resize(labels.size());
+
+    // parse all labels ignoring the case for faster search
+    // and extract the units from the labels
+    for(int i = 0; i < labels.size(); i++) {
+        auto len = strlen(labels[i]);
+        char* tmp = new char[len + 1];
+        tmp[len] = 0;
+        for(int j = 0; labels[i][j]; j++)
+            tmp[j] = tolower(labels[i][j]);
+        labels_lowercase[i] = tmp;
+        auto open_bracket = strrchr(labels[i], '[');
+        if(open_bracket) {
+            units[i] = std::string(std::string_view(open_bracket, labels[i] - open_bracket + len - 1));
+        }
+    }
+    PreCacheGraphs();
+
+    if(std::string(labels[1]) == "Time") {
+        data_start_idx = 2;
+    }
+}
+
+void OpenHWI_File() {
     char filename[MAX_PATH]{ "" };
 
     const char szExt[] = "CSV\0*.csv\0\0";
@@ -96,47 +143,27 @@ void OpenHWI_File() {
         memset(filter_text, 0, sizeof(filter_text));
         labels.clear(); data.clear(); sources.clear(); cachedPlots.clear(); og_date.clear(); data_start_idx = 1;
 
-#ifdef _DEBUG
-        auto start = high_resolution_clock::now();
-#endif
-        if(!ParseFromFile(filename, labels, data, sources, use_relative_time, &imported_time_start))
+        if(!TryParseFile(filename))
             return;
-#ifdef _DEBUG
-        auto stop = high_resolution_clock::now();
-        printf("Parsing took %lldms\n", duration_cast<microseconds>(stop - start).count() / 1000);
-#endif
-
-        og_date = data[0];
-
-        auto full_file_name = std::string_view (filename);
-        auto file_name = full_file_name.substr(full_file_name.find_last_of("/\\") + 1);
-        file_name = file_name.substr(0, file_name.find_last_of('.'));
-        file_name.copy(open_file_name, file_name.size() + 1);
-        open_file_name[file_name.size()] = 0;
-
-        labels_lowercase.resize(labels.size());
-        units.resize(labels.size());
-
-        // parse all labels ignoring the case for faster search
-        // and extract the units from the labels
-        for(int i = 0; i < labels.size(); i++) {
-            auto len = strlen(labels[i]);
-            char* tmp = new char[len + 1];
-            tmp[len] = 0;
-            for(int j = 0; labels[i][j]; j++)
-                tmp[j] = tolower(labels[i][j]);
-            labels_lowercase[i] = tmp;
-            auto open_bracket = strrchr(labels[i], '[');
-            if(open_bracket) {
-                units[i] = std::string(std::string_view(open_bracket, labels[i] - open_bracket + len - 1));
-            }
-        }
-        PreCacheGraphs();
-
-        if(std::string(labels[1]) == "Time") {
-            data_start_idx = 2;
-        }
     }
+}
+
+void HandleDropFile(WPARAM wparam) {
+    // DragQueryFile() takes a LPWSTR for the name, so we need a TCHAR string
+    TCHAR szName[MAX_PATH];
+
+    // Here we cast the wParam as a HDROP handle to pass into the next functions
+    HDROP hDrop = (HDROP)wparam;
+
+    // Retrieve the first (0 index) file dropped
+    DragQueryFile(hDrop, 0, szName, MAX_PATH);
+
+    memset(filter_text, 0, sizeof(filter_text));
+    labels.clear(); data.clear(); sources.clear(); cachedPlots.clear(); og_date.clear(); data_start_idx = 1;
+
+    TryParseFile(szName);
+
+    DragFinish(hDrop);
 }
 
 int DrawGui() {
@@ -397,6 +424,8 @@ int main() {
     hwnd = GUI::Setup(DrawGui);
 
     ImGui::GetIO().IniFilename = nullptr;
+
+    GUI::OnFileDrop = HandleDropFile;
 
     while(true) {
         if(GUI::DrawFrame())

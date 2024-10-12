@@ -548,6 +548,9 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         return true;
 
     switch (msg) {
+        case WM_CREATE:
+            DragAcceptFiles(hWnd, true);
+            break;
         case WM_SIZE:
             if (g_pd3dDevice != nullptr && wParam != SIZE_MINIMIZED) {
                 WaitForLastSubmittedFrame();
@@ -566,6 +569,9 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         case WM_DESTROY:
             ::PostQuitMessage(0);
             return 0;
+        case WM_DROPFILES:
+            GUI::OnFileDrop(wParam);
+            break;
     }
     return ::DefWindowProcW(hWnd, msg, wParam, lParam);
 }
